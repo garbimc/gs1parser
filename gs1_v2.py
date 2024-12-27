@@ -1,5 +1,8 @@
 import streamlit as st
 import pyperclip  # For copying text to clipboard
+from barcode import EAN13
+from barcode.writer import ImageWriter
+from io import BytesIO
 
 # Set page configuration
 st.set_page_config(
@@ -41,10 +44,38 @@ st.markdown(
     .copy-button:hover {
         background-color: #007B9E;
     }
+    .container {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+def generate_ean13_barcode(data):
+    """Generate an EAN-13 barcode and return it as an image."""
+    # Ensure the data is 12 or 13 digits long
+    if len(data) < 12:
+        data = data.ljust(12, '0')  # Pad with zeros if necessary
+    elif len(data) > 13:
+        data = data[:13]  # Truncate to 13 digits
+    # Create an EAN-13 barcode with smaller size
+    writer = ImageWriter()
+    writer.set_options({
+        'module_width': 0.2,  # Reduce the width of each barcode module
+        'module_height': 10,  # Reduce the height of the barcode
+        'font_size': 8,       # Reduce the font size of the barcode text
+        'quiet_zone': 2       # Reduce the quiet zone (empty space around the barcode)
+    })
+    ean13 = EAN13(data, writer=writer)
+    buffer = BytesIO()
+    ean13.write(buffer)
+    buffer.seek(0)
+    return buffer
 
 def parse_gs1_barcode(barcode):
     parsed_data = {}
@@ -57,8 +88,11 @@ def parse_gs1_barcode(barcode):
             parsed_data['ExpirationDate'] = barcode[i+2:i+8]  # Expiration date is 6 characters long
             i += 8
         elif barcode[i:i+2] == '10':
-            # Lot number ends when the '240' identifier starts
-            next_index = barcode.find('240', i+2)
+            # Lot number ends when the '240' identifier starts or GS character is found
+            next_index = min(
+                barcode.find('240', i+2),
+                barcode.find('', i+2)
+            )
             if next_index == -1:
                 parsed_data['LotNumber'] = barcode[i+2:]
                 i = len(barcode)
@@ -66,8 +100,11 @@ def parse_gs1_barcode(barcode):
                 parsed_data['LotNumber'] = barcode[i+2:next_index]
                 i = next_index
         elif barcode[i:i+2] == '21':
-            # Serial number ends when the '240' identifier starts
-            next_index = barcode.find('240', i+2)
+            # Serial number ends when the '240' identifier starts or GS character is found
+            next_index = min(
+                barcode.find('240', i+2),
+                barcode.find('', i+2)
+            )
             if next_index == -1:
                 parsed_data['SerialNumber'] = barcode[i+2:]
                 i = len(barcode)
@@ -95,12 +132,26 @@ def main():
     if barcode:
         parsed_data = parse_gs1_barcode(barcode)
         st.write("### Parsed GS1 Barcode Information:")
+        
+        # Use columns to create a better layout
         for key, value in parsed_data.items():
-            st.write(f"**{key}:** {value}")
-            # Add a button to copy the value to clipboard
-            if st.button(f"Copy {key}", key=f"copy_{key}"):
-                pyperclip.copy(value)
-                st.success(f"Copied {key} to clipboard!")
+            with st.container():
+                st.markdown('<div class="container">', unsafe_allow_html=True)
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"**{key}:** {value}")
+                with col2:
+                    if st.button(f"Copy {key}", key=f"copy_{key}"):
+                        pyperclip.copy(value)
+                        st.success(f"Copied {key} to clipboard!")
+                # Generate and display EAN-13 barcode
+                st.write(f"**EAN-13 Barcode for {key}:**")
+                try:
+                    barcode_image = generate_ean13_barcode(value)
+                    st.image(barcode_image, caption=f"{key}: {value}", use_column_width=False, width=200)  # Adjust width here
+                except Exception as e:
+                    st.error(f"Failed to generate EAN-13 barcode for {key}: {e}")
+                st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
