@@ -44,13 +44,6 @@ st.markdown(
     .copy-button:hover {
         background-color: #007B9E;
     }
-    .container {
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        padding: 15px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -133,25 +126,23 @@ def main():
         parsed_data = parse_gs1_barcode(barcode)
         st.write("### Parsed GS1 Barcode Information:")
         
-        # Use columns to create a better layout
-        for key, value in parsed_data.items():
-            with st.container():
-                st.markdown('<div class="container">', unsafe_allow_html=True)
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{key}:** {value}")
-                with col2:
-                    if st.button(f"Copy {key}", key=f"copy_{key}"):
-                        pyperclip.copy(value)
-                        st.success(f"Copied {key} to clipboard!")
+        # Create tabs for each parsed field
+        tabs = st.tabs(list(parsed_data.keys()))
+        
+        for tab, (key, value) in zip(tabs, parsed_data.items()):
+            with tab:
+                st.write(f"**{key}:** {value}")
+                # Add a button to copy the value to clipboard
+                if st.button(f"Copy {key}", key=f"copy_{key}"):
+                    pyperclip.copy(value)
+                    st.success(f"Copied {key} to clipboard!")
                 # Generate and display EAN-13 barcode
                 st.write(f"**EAN-13 Barcode for {key}:**")
                 try:
                     barcode_image = generate_ean13_barcode(value)
-                    st.image(barcode_image, caption=f"{key}: {value}", use_column_width=False, width=200)  # Adjust width here
+                    st.image(barcode_image, caption=f"{key}: {value}", width=300)  # Set a fixed width for the barcode image
                 except Exception as e:
                     st.error(f"Failed to generate EAN-13 barcode for {key}: {e}")
-                st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
